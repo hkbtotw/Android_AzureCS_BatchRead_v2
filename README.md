@@ -2,10 +2,10 @@
 Integrated Camera upload, Cropping and Image processing to v1
 
 <i> Android Application connected with Azure Cognitive Service - Batch Read API   </i> </ br>
-<i> In version 2, Camera upload, Image processing and Cropping functionalities were added </i> </ br>
+<i> In version 2, Camera upload, Image processing and Cropping functionalities were added </i> <\ br>
 
 <p>Next</p>
-To add parseServer functionality to allow program to compute total miles covered in trip and the save in the server </ br>
+To add parseServer functionality to allow program to compute total miles covered in trip and the save in the server <\ br>
 
 
 <b> Sample Images:<br/></b>
