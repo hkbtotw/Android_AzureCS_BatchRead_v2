@@ -16,20 +16,114 @@
             android:padding="5dp"
             android:layout_width="match_parent"
             android:layout_height="wrap_content">
+
+            <LinearLayout
+                android:orientation="horizontal"
+                android:padding="5dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+            <EditText
+                android:id="@+id/tripId"
+                android:text="T001"
+                android:textSize="30sp"
+                android:padding="10dp"
+                android:layout_width="250dp"
+                android:layout_height="wrap_content"/>
+            <EditText
+                android:id="@+id/userId"
+                android:text="Tawan"
+                android:textSize="30sp"
+                android:padding="10dp"
+                android:layout_width="250dp"
+                android:layout_height="wrap_content"/>
+
+            </LinearLayout>
+            <RadioGroup
+                android:id="@+id/meterSelection"
+                android:layout_marginTop="20dp"
+                android:orientation="horizontal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="clip_horizontal">
+            <RadioButton
+                android:id="@+id/digitalMeter"
+                android:text="Digital Meter"
+                android:textSize="30sp"
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"/>
+            <RadioButton
+                android:id="@+id/analogMeter"
+                android:text="Analog Meter"
+                android:textSize="30sp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"/>
+            </RadioGroup>
+
+
+            <RadioGroup
+                android:id="@+id/tripSelection"
+                android:layout_marginTop="20dp"
+                android:orientation="horizontal"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="clip_horizontal">
+                <RadioButton
+                    android:id="@+id/goTrip"
+                    android:text=" GO "
+                    android:textSize="30sp"
+                    android:layout_width="300dp"
+                    android:layout_height="wrap_content"/>
+                <RadioButton
+                    android:id="@+id/backTrip"
+                    android:text=" BACK "
+                    android:textSize="30sp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"/>
+            </RadioGroup>
+
+
+
+            <EditText
+                android:id="@+id/resultEdit"
+                android:inputType="number"
+                android:digits="1234567890"
+                android:text="View and Edit Result HERE"
+                android:layout_gravity="center_horizontal"
+                android:textSize="30sp"
+                android:padding="30dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
             <TextView
                 android:id="@+id/resultView"
-                android:text="View Result HERE"
+                android:text="Information Summary"
+                android:padding="30dp"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
                 android:textSize="30sp"/>
+            <LinearLayout
+                android:orientation="horizontal"
+                android:paddingTop="20dp"
+                android:gravity="center_horizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
             <Button
                 android:id="@+id/loadImage"
                 android:text="Click to load image"
                 android:layout_width="wrap_content"
                 android:textSize="30sp"
+                android:padding="30dp"
                 android:layout_gravity="center_horizontal"
                 android:layout_height="wrap_content"/>
+            <Button
+                android:id="@+id/recordData"
+                android:text="Record Data"
+                android:layout_width="wrap_content"
+                android:textSize="30sp"
+                android:padding="30dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_height="wrap_content"/>
+            </LinearLayout>
 
             <ImageView
                 android:id="@+id/imageView"

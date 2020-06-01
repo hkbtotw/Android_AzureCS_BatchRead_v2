@@ -24,17 +24,31 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.text.InputType;
 import android.text.TextUtils;
+import android.text.method.DigitsKeyListener;
+import android.text.method.KeyListener;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.gson.Gson;
+import com.parse.FindCallback;
+import com.parse.Parse;
+import com.parse.ParseACL;
+import com.parse.ParseAnalytics;
+import com.parse.ParseException;
+import com.parse.ParseObject;
+import com.parse.ParseQuery;
+import com.parse.ParseUser;
+import com.parse.SaveCallback;
 import com.theartofdev.edmodo.cropper.CropImage;
 import com.theartofdev.edmodo.cropper.CropImageView;
 
@@ -47,7 +61,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import edmt.dev.edmtdevcognitivevision.Contract.AnalysisInDomainResult;
@@ -69,6 +86,14 @@ public class MainActivity extends AppCompatActivity {
     ImageView mPreviewIv;
     ImageView mProcessedImageView;
     TextView mResultView;
+    RadioButton mDigital;
+    RadioButton mAnalog;
+    RadioGroup mMeterSelection;
+    EditText mEditResult;
+    Button mRecordData;
+    RadioGroup mTripSelection;
+    EditText mTripId;
+    EditText mUserId;
 
     private static final int CAMERA_REQUEST_CODE=200;
     private static final int STORAGE_REQUEST_CODE=400;
@@ -80,10 +105,13 @@ public class MainActivity extends AppCompatActivity {
     VisionServiceClient visionServiceClient=new VisionServiceRestClient(API_KEY,API_LINK);
     VisionBatchRead visionBatchRead=new VisionBatchRead(API_KEY,API_LINK);
     ImageProcessing imageProcessing=new ImageProcessing();
+    ParseServer parseServer=new ParseServer();
 
     String cameraPermission[];
     String storagePermission[];
     Uri image_uri;
+    public boolean flagMeter;
+    public String tripString;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,20 +122,134 @@ public class MainActivity extends AppCompatActivity {
         mPreviewIv=findViewById(R.id.imageView);
         mProcessedImageView=findViewById(R.id.processedImageView);
         mResultView=findViewById(R.id.resultView);
+        mDigital=findViewById(R.id.digitalMeter);
+        mAnalog=findViewById(R.id.analogMeter);
+        mMeterSelection=findViewById(R.id.meterSelection);
+        mEditResult=findViewById(R.id.resultEdit);
+        mRecordData=findViewById(R.id.recordData);
+        mTripSelection=findViewById(R.id.tripSelection);
+        mTripId=findViewById(R.id.tripId);
+        mUserId=findViewById(R.id.userId);
+
 
         cameraPermission=new String[]{Manifest.permission.CAMERA,Manifest.permission.WRITE_EXTERNAL_STORAGE};
         storagePermission=new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE};
 
+
         mLoadImage.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Log.i("LoadImg"," Checked 1 ");
-                showImageImportDialog();
+                int selectedid=mMeterSelection.getCheckedRadioButtonId();
+                Log.i("selectId"," choice : "+selectedid);
+                switch (selectedid){
+                    case R.id.analogMeter:
+                        flagMeter=true;
+                        Log.i("selectId"," meter  :  1 "+selectedid+" "+flagMeter);
+                        break;
 
+                    case R.id.digitalMeter:
+                        flagMeter=false;
+                        Log.i("selectId"," meter  :  2 "+selectedid+" "+flagMeter);
+                        break;
+                }
+                Log.i("LoadImg"," Checked --  "+flagMeter);
+                showImageImportDialog();
             } // onClick
+
         }); //setOnClickListener
 
-    }
+        mRecordData.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                int selectedid=mTripSelection.getCheckedRadioButtonId();
+                Log.i("selectId"," choice : "+selectedid);
+                switch (selectedid){
+                    case R.id.goTrip:
+                        tripString="GO";
+                        Log.i("selectId"," meter  :  1 "+selectedid+" "+tripString);
+                        break;
+
+                    case R.id.backTrip:
+                        tripString="BACK";
+                        Log.i("selectId"," meter  :  2 "+selectedid+" "+tripString);
+                        break;
+                }
+                Log.i("LoadImg"," Checked --  "+flagMeter+"  : "+tripString);
+
+                String tripIdIn=mTripId.getText().toString();
+                mResultView.setText("Mile number : "+mEditResult.getText()+" in "+tripString+" of trip no: "+tripIdIn);
+
+                //ref: https://stackoverflow.com/questions/1119583/how-do-i-show-the-number-keyboard-on-an-edittext-in-android
+                // Show only number keys for text editing
+                mEditResult.setInputType(InputType.TYPE_CLASS_NUMBER);
+                KeyListener keyListener = DigitsKeyListener.getInstance("1234567890");
+                mEditResult.setKeyListener(keyListener);
+
+                String test=mEditResult.getText().toString();
+
+                //ref: https://stackoverflow.com/questions/10372862/java-string-remove-all-non-numeric-characters
+                // replace all non numeric characters by blank
+                String digitText = test.replaceAll("[^0-9.]", "");
+                Log.i("GETTEXT","test : "+digitText);
+
+                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                builder.setTitle("Recording .... ");
+                builder.setMessage("Would you like to submit data?");
+                builder.setPositiveButton("Yes", new DialogInterface.OnClickListener()
+                {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which)
+                    {
+                        Toast.makeText(MainActivity.this," Recording to Parse Server ",Toast.LENGTH_SHORT).show();
+
+                        SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
+
+                        SimpleDateFormat sdfFull=new SimpleDateFormat("dd-MM-YYYY HH:MM:ss");
+                        String currentDatetime=sdf.format(new Date());
+                        String currentDatetimeFull=sdfFull.format(new Date());
+
+
+                        // Save data to Parse server
+                        ParseObject object = new ParseObject("DriverMonitor");
+                        String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
+                        if(tripString=="GO"){
+                            Log.i("parse"," tripString : "+tripString+" : "+refCol);
+                            parseServer.SaveToParseServerGO(object,mEditResult.getText().toString(),mTripId.getText().toString(),currentDatetimeFull,mUserId.getText().toString(),refCol);
+                        }else{
+                            Log.i("parse"," tripString : "+tripString+" : "+refCol);
+                            parseServer.SaveToParseServerBACK(object, refCol, mEditResult.getText().toString(), currentDatetimeFull);
+                            parseServer.ReadFromParseServer(refCol);
+
+                        }
+
+
+
+                    }
+                });
+                builder.setNegativeButton("No", new DialogInterface.OnClickListener()
+                {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which)
+                    {
+                        // Stuff to do
+                        dialog.dismiss();
+                    }
+                });
+
+                AlertDialog d = builder.create();
+                d.show();
+
+            }  // onClick
+        }); // mRecordData.setOnClickListener
+
+
+
+        ParseAnalytics.trackAppOpenedInBackground(getIntent());
+
+    } // On Create
+
+
+
 
     private void showImageImportDialog() {
         String[] items={" Camera", "Gallery"};
@@ -231,11 +373,22 @@ public class MainActivity extends AppCompatActivity {
                 Bitmap bitmap=bitmapDrawable.getBitmap();
 
                 // Action start HERE
-                Bitmap bitmap1=imageProcessing.toGrayscale(bitmap);
+                Bitmap bitmap1=bitmap;
+                Log.i("select","flagMeter : "+flagMeter);
+                if(!flagMeter){
+                    // toBinary ref: https://stackoverflow.com/questions/20299264/android-convert-grayscale-to-binary-image
+                    // and https://stackoverflow.com/questions/6764839/error-with-setpixels
+                    bitmap1=imageProcessing.toBinary(bitmap);
+                }else{
+                    bitmap1=imageProcessing.toGrayscale(bitmap);
+                }
                 int height = bitmap1.getHeight();
                 int width = bitmap1.getWidth();
                 Bitmap newBitmap=Bitmap.createScaledBitmap(bitmap1,width*2,height*2,true);
-                mProcessedImageView.setImageBitmap(newBitmap);
+
+                // View processed image for checking
+                //mProcessedImageView.setImageBitmap(newBitmap);
+
 
                 ByteArrayOutputStream outputStream=new ByteArrayOutputStream();
                 //bitmap.compress(Bitmap.CompressFormat.JPEG,100,outputStream);
@@ -261,12 +414,15 @@ public class MainActivity extends AppCompatActivity {
                             Log.i("Result"," textview : "+result);
                             Log.i("Result"," textview : "+result.toString());
 
-
+                            String resultOut=result.toString();
+                            if(resultOut.length()==0){
+                                resultOut="Not Readble";
+                            }
                             //AnalysisResult result=visionServiceClient.analyzeImage(inputStreams[0],features,details);
                             //OCR result=visionServiceClient.recognizeText(inputStreams[0],"en",true);
                             //String jsonResult=new Gson().toJson(result);
                             //Log.i("info","-->"+jsonResult);
-                            return result.toString();
+                            return resultOut;
 
                         } catch (IOException e) {
                             e.printStackTrace();
@@ -308,7 +464,16 @@ public class MainActivity extends AppCompatActivity {
                             }
                             txtResult.setText(result_text.toString());  */
                             Log.i("Result"," textview : "+s);
-                            mResultView.setText(s);
+                            //mResultView.setText(s);
+                            //mEditResult.setText(mResultView.getText());
+                            String digitText = s.replaceAll("[^0-9.]", "");
+                            if(digitText.length()>0){
+                                mEditResult.setText(digitText);
+                            }else{
+                                mEditResult.setText("Not readable");
+                            }
+
+
                         }
                     }
 
@@ -330,6 +495,84 @@ public class MainActivity extends AppCompatActivity {
     }  // On Activity Result
 
 } // Program
+
+class ParseServer{
+    public void SaveToParseServerGO(ParseObject object,String mileIn, String tripIdIn, String dateIn,String userIn, String refColIn){
+        object.put("tripId", tripIdIn);
+        object.put("goMile", mileIn);
+        object.put("goDate", dateIn);
+        object.put("backMile", "");
+        object.put("backDate", "");
+        object.put("calTotTrip", 0);
+        object.put("MeasuredTotTrip", 0);
+        object.put("user",userIn);
+        object.put("refCol",refColIn);
+
+        object.saveInBackground(new SaveCallback() {
+            @Override
+            public void done(ParseException ex) {
+                if (ex == null) {
+                    Log.i("Parse Result", "Successful!");
+                } else {
+                    Log.i("Parse Result", "Failed  GO " + ex.toString());
+                }
+            }
+        });
+        ParseUser.enableAutomaticUser();
+
+        ParseACL defaultACL = new ParseACL();
+        defaultACL.setPublicReadAccess(true);
+        defaultACL.setPublicWriteAccess(true);
+        ParseACL.setDefaultACL(defaultACL, true);
+    }// SaveTo ParseServer GO
+
+    public void SaveToParseServerBACK(final ParseObject object, String refCol, final String mileIn, final String dateIn){
+        ParseQuery<ParseObject> query=new ParseQuery<ParseObject>("DriverMonitor");
+        query.whereEqualTo("refCol",refCol);
+        query.findInBackground(new FindCallback<ParseObject>() {
+            @Override
+            public void done(List<ParseObject> objects, ParseException e) {
+                if(e==null && objects.size()>0){
+                    objects.get(0).put("backMile", mileIn);
+                    objects.get(0).put("backDate", dateIn);
+                    objects.get(0).saveInBackground();
+                    Log.i("test", " Written successfully. ");
+                }else{
+                    Log.i("test", " Null ");
+                    e.printStackTrace();
+                }
+            }
+        });
+
+    } //SaveTo ParseServer BACK
+
+    public void ReadFromParseServer(String refCol){
+        ParseQuery<ParseObject> query=new ParseQuery<ParseObject>("DriverMonitor");
+        query.whereEqualTo("refCol",refCol);
+        query.findInBackground(new FindCallback<ParseObject>() {
+            @Override
+            public void done(List<ParseObject> objects, ParseException e) {
+                if (e == null && objects.size() > 0) {
+                    String goMileStr = objects.get(0).getString("goMile");
+                    String backMileStr = objects.get(0).getString("backMile");
+                    Log.i("coverage", " Distance covered " + goMileStr+" : "+backMileStr);
+                    float goNumber = Float.parseFloat(goMileStr);
+                    float backNumber = Float.parseFloat(backMileStr);
+                    float coverage = backNumber - goNumber;
+                    Log.i("coverage", " Distance covered " + coverage);
+
+                } else {
+                    Log.i("coverage", " Null ");
+                    e.printStackTrace();
+
+                }
+
+            }
+
+            });
+    }// ReadFromParseServer
+
+} // ParseServer
 
 class ImageProcessing{
     public static Bitmap convertImage(Bitmap original){
@@ -371,6 +614,41 @@ class ImageProcessing{
         c.drawBitmap(bmpOriginal, 0, 0, paint);
         return bmpGrayscale;
     }  // tograyscale
+
+
+    public Bitmap toBinary(Bitmap bmpOriginal) {
+        int width, height, threshold;
+        height = bmpOriginal.getHeight();
+        width = bmpOriginal.getWidth();
+        threshold = 127;
+
+        Bitmap bmpBinary = Bitmap.createBitmap(bmpOriginal);
+        bmpBinary = bmpBinary.copy( Bitmap.Config.ARGB_8888 , true);
+
+        for(int x = 0; x < width; x++) {
+            for(int y = 0; y < height; y++) {
+                // get one pixel color
+                int pixel = bmpOriginal.getPixel(x, y);
+                int red = Color.red(pixel);
+                //int green = Color.green(pixel);
+                //int blue = Color.blue(pixel);
+
+                //int gray = (int)(red * 0.3 + green * 0.59 + blue * 0.11);
+
+                //get binary value
+                //if(gray < threshold){
+                if(red < threshold){
+                    bmpBinary.setPixel(x, y, 0xFF000000);
+                    //Log.i("color"," pixel : 1"+x+" "+y);
+                } else{
+                    bmpBinary.setPixel(x, y, 0xFFFFFFFF);
+                    //Log.i("color"," pixel : 2"+x+" "+y);
+                }
+
+            }
+        }
+        return bmpBinary;
+    } // toBinary
 }// class ImageProcessing
 
 class VisionBatchRead implements VisionServiceClient {
