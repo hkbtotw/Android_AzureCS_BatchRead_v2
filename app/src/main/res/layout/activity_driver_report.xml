@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="10dp"
+    tools:context=".DriverReport">
+    <LinearLayout
+        android:orientation="vertical"
+        android:padding="30dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+    <TextView
+        android:id="@+id/title"
+        android:text="Driving Report Summary"
+        android:textSize="20sp"
+        android:paddingTop="30dp"
+        android:gravity="center_horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/date"
+        android:text="Operation date"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/user"
+        android:text="Name"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/trip"
+        android:text="Name"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+    <TextView
+        android:id="@+id/originMile"
+        android:text="Origin"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/originTime"
+        android:text="Time"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+    </LinearLayout>
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+    <TextView
+        android:id="@+id/destinationMile"
+        android:text="Destination"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/destinationTime"
+        android:text="Time"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
+    </LinearLayout>
+    <TextView
+        android:id="@+id/totalMile"
+        android:text="Total Distance"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+    <TextView
+        android:id="@+id/totalDistance"
+        android:text="Total Running Distance from LatLng"
+        android:textSize="10sp"
+        android:paddingTop="20dp"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+
+
+    </LinearLayout>
+
+</RelativeLayout>

@@ -6,10 +6,14 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.fragment.app.DialogFragment;
 
 import android.Manifest;
+import android.app.Activity;
+import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -20,10 +24,15 @@ import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
 import android.graphics.drawable.BitmapDrawable;
+import android.location.Criteria;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.method.DigitsKeyListener;
@@ -31,6 +40,7 @@ import android.text.method.KeyListener;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -39,6 +49,8 @@ import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.model.LatLng;
 import com.google.gson.Gson;
 import com.parse.FindCallback;
 import com.parse.Parse;
@@ -61,7 +73,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -94,6 +108,21 @@ public class MainActivity extends AppCompatActivity {
     RadioGroup mTripSelection;
     EditText mTripId;
     EditText mUserId;
+    Button mLoadReport;
+    Button mLocOn;
+    Button mLocOff;
+    TextView mDistanceView;
+
+    private static final int TIME = 5000;
+    private static final int DISTANCE = 5;  // Check at every i second  (i *1000) if the location changed more than distance, to update location
+    private LocationManager lcm;
+    private ArrayList latLonList;
+    public Boolean recordFlag;
+    public LatLng currentPosition;
+    public LatLng previousPosition;
+    public Location lastLocation=null;
+    private double lastDistance=0;
+    public double sumDistance=0;
 
     private static final int CAMERA_REQUEST_CODE=200;
     private static final int STORAGE_REQUEST_CODE=400;
@@ -117,6 +146,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        getWindow().addFlags (WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         mLoadImage=findViewById(R.id.loadImage);
         mPreviewIv=findViewById(R.id.imageView);
@@ -130,11 +160,52 @@ public class MainActivity extends AppCompatActivity {
         mTripSelection=findViewById(R.id.tripSelection);
         mTripId=findViewById(R.id.tripId);
         mUserId=findViewById(R.id.userId);
+        mLoadReport=findViewById(R.id.loadReport);
+        mLocOn=findViewById(R.id.onLocation);
+        mLocOff=findViewById(R.id.offLocation);
+        mDistanceView=findViewById(R.id.distanceView);
 
 
         cameraPermission=new String[]{Manifest.permission.CAMERA,Manifest.permission.WRITE_EXTERNAL_STORAGE};
         storagePermission=new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE};
 
+        recordFlag=false;
+        lcm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        latLonList= new ArrayList<String>();
+
+        final boolean gpsEnabled = lcm.isProviderEnabled(
+                LocationManager.GPS_PROVIDER);
+        if (!gpsEnabled) {
+            new EnableGpsDialogFragment().show(getSupportFragmentManager(), "enableGpsDialog");
+        } // if
+
+        mLocOn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                //Intent intent=new Intent(MainActivity.this, LocationService.class);
+                //startService(intent);
+                recordFlag=true;
+                Toast.makeText(MainActivity.this,"Start Recording Running Distance ",Toast.LENGTH_LONG).show();
+            }
+        }); //mLocOn
+
+        mLocOff.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                //Intent intent=new Intent(MainActivity.this, LocationService.class);
+                //stopService(intent);
+                recordFlag=false;
+                ParseObject object = new ParseObject("DriverMonitor");
+                SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
+                String currentDatetime=sdf.format(new Date());
+
+                // Save data to Parse server
+                object = new ParseObject("DriverMonitor");
+                String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
+                parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
+                Toast.makeText(MainActivity.this,"Covered Distance Recorded",Toast.LENGTH_LONG).show();
+            }
+        }); //mLocOff
 
         mLoadImage.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -218,8 +289,6 @@ public class MainActivity extends AppCompatActivity {
                         }else{
                             Log.i("parse"," tripString : "+tripString+" : "+refCol);
                             parseServer.SaveToParseServerBACK(object, refCol, mEditResult.getText().toString(), currentDatetimeFull);
-                            parseServer.ReadFromParseServer(refCol);
-
                         }
 
 
@@ -242,13 +311,157 @@ public class MainActivity extends AppCompatActivity {
             }  // onClick
         }); // mRecordData.setOnClickListener
 
-
+        mLoadReport.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
+                String currentDatetime=sdf.format(new Date());
+                String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
+                try {
+                    Thread.sleep(2000);
+                    parseServer.ReadFromParseServer(refCol);
+                    Thread.sleep(2000);
+                    parseServer.ReadFromParseServer(refCol);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                Intent intent=new Intent(getApplicationContext(), DriverReport.class);
+                intent.putExtra("username",mUserId.getText().toString());
+                intent.putExtra("tripId",mTripId.getText().toString());
+                intent.putExtra("sumDistance",sumDistance);
+                startActivity(intent);
+            }
+        }); // mLoadReport
 
         ParseAnalytics.trackAppOpenedInBackground(getIntent());
+
+
+
+
+
 
     } // On Create
 
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        //lcm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            ActivityCompat.requestPermissions((Activity) this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 101);
+
+            return;
+        }
+
+        Criteria criteria=new Criteria();
+        criteria.setAccuracy(Criteria.ACCURACY_FINE);
+
+        String provider = lcm.getBestProvider(criteria, true);
+
+        Log.d("Location"," best provider "+ provider);
+
+        //lcm.requestLocationUpdates(LocationManager.GPS_PROVIDER,TIME, DISTANCE, listener);
+
+        lcm.requestLocationUpdates(provider,
+                TIME, DISTANCE, listener);
+    }
+
+    private final LocationListener listener= new LocationListener() {
+        @Override
+        public void onLocationChanged(Location location) {
+            currentPosition= new LatLng(location.getLatitude(),location.getLongitude());
+            //if(previousPosition!=null) {
+            //    Log.d("Position", " Current " + currentPosition + ", Previous " + previousPosition);
+            //}
+
+
+            //Log.d("Position", " Current "+currentPosition+", Previous "+previousPosition);
+            if(recordFlag){
+                previousPosition=currentPosition;
+                updateWithNewLocation(location);
+                Log.d("Flag", "(" + location.getLatitude() + "," + location.getLongitude() + ")");}else{
+                Log.d("Flag", " Flag "+recordFlag);
+            }
+
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+
+        }
+    }; // End LocationListener
+
+
+    @Override
+    public void onStop(){
+        super.onStop();
+        lcm.removeUpdates(listener);
+    } // onStop
+
+
+    private void updateWithNewLocation(Location location){
+        String latLongString="";
+        if(location!=null){
+            double lat=location.getLatitude();
+            double lng=location.getLongitude();
+            latLongString="Lat: "+lat+" ::  Long : "+lng;
+
+            if(lastLocation!=null){
+                double elaspedTime=(location.getTime()-lastLocation.getTime())/1000;
+                lastDistance=lastLocation.distanceTo(location);
+                sumDistance=sumDistance+(lastDistance/1000);
+            }
+            this.lastLocation=location;
+            Log.d("Speed"," distance "+lastDistance+" sumDist "+sumDistance);
+
+
+        } else {
+            latLongString= " No location found ";
+        } // if
+
+        SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY HH:mm:ss");
+        String currentDatetime=sdf.format(new Date());
+        String out=" [ " +currentDatetime+ ","+ location.getLatitude() + "," + location.getLongitude() + " ] ";
+        latLonList.add(out);
+
+        Log.d("List Out", latLonList.toString() );
+        Log.d("DateTime","location date :" + sdf.format(location.getTime()));
+        /*
+        ParseObject object = new ParseObject("DriverMonitor");
+        sdf=new SimpleDateFormat("dd-MM-YYYY");
+        currentDatetime=sdf.format(new Date());
+
+        // Save data to Parse server
+        object = new ParseObject("DriverMonitor");
+        String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
+        parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
+        */
+        DecimalFormat df = new DecimalFormat("#.#");
+        String dummy = df.format(sumDistance);
+
+        Log.i("text"," text out : "+dummy);
+        mDistanceView.setText("Running : "+dummy+" km");
+        //WriteFile(latLongString);
+
+    } //updateWithNewLocation
 
 
     private void showImageImportDialog() {
@@ -494,7 +707,29 @@ public class MainActivity extends AppCompatActivity {
         }
     }  // On Activity Result
 
+
+    public static class EnableGpsDialogFragment extends DialogFragment {
+
+        @Override
+        public Dialog onCreateDialog(Bundle savedInstanceState){
+            return new android.app.AlertDialog.Builder(getActivity())
+                    .setTitle("GPS System")
+                    .setMessage(" Enable GPS to use Tracker ")
+                    .setPositiveButton("Setting ", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            Intent settingsIntent=new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                            startActivity(settingsIntent);
+                        }
+                    })
+                    .create();
+        } //onCreateDialog
+
+    } // EnableGpsDialogFragment
 } // Program
+
+
+
 
 class ParseServer{
     public void SaveToParseServerGO(ParseObject object,String mileIn, String tripIdIn, String dateIn,String userIn, String refColIn){
@@ -546,6 +781,25 @@ class ParseServer{
 
     } //SaveTo ParseServer BACK
 
+    public void SaveToParseServerLATLNG(final ParseObject object, String refCol, final float distIn){
+        ParseQuery<ParseObject> query=new ParseQuery<ParseObject>("DriverMonitor");
+        query.whereEqualTo("refCol",refCol);
+        query.findInBackground(new FindCallback<ParseObject>() {
+            @Override
+            public void done(List<ParseObject> objects, ParseException e) {
+                if(e==null && objects.size()>0){
+                    objects.get(0).put("MeasuredTotTrip", distIn);
+                    objects.get(0).saveInBackground();
+                    Log.i("test", " Written successfully. ");
+                }else{
+                    Log.i("test", " Null ");
+                    e.printStackTrace();
+                }
+            }
+        });
+
+    }// SaveTo ParseServer LATLNG
+
     public void ReadFromParseServer(String refCol){
         ParseQuery<ParseObject> query=new ParseQuery<ParseObject>("DriverMonitor");
         query.whereEqualTo("refCol",refCol);
@@ -554,22 +808,22 @@ class ParseServer{
             public void done(List<ParseObject> objects, ParseException e) {
                 if (e == null && objects.size() > 0) {
                     String goMileStr = objects.get(0).getString("goMile");
-                    String backMileStr = objects.get(0).getString("backMile");
-                    Log.i("coverage", " Distance covered " + goMileStr+" : "+backMileStr);
                     float goNumber = Float.parseFloat(goMileStr);
+                    String backMileStr = objects.get(0).getString("backMile");
                     float backNumber = Float.parseFloat(backMileStr);
                     float coverage = backNumber - goNumber;
                     Log.i("coverage", " Distance covered " + coverage);
-
+                    objects.get(0).put("calTotTrip", coverage);
+                    objects.get(0).saveInBackground();
+                    Log.i("coverage", " Distance covered " + goMileStr+" : "+backMileStr);
                 } else {
                     Log.i("coverage", " Null ");
                     e.printStackTrace();
-
                 }
 
-            }
+            }  // done
 
-            });
+            }); // query
     }// ReadFromParseServer
 
 } // ParseServer
