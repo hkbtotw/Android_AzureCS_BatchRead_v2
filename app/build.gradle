@@ -45,4 +45,8 @@ dependencies {
     implementation 'com.parse:parse-android:1.13.0'
     implementation 'com.google.android.gms:play-services-maps:17.0.0'
 
+    //Background location services
+    //implementation 'com.karumi:dexter:5.0.0'
+    implementation 'com.google.android.gms:play-services-location:17.0.0'
+
 }

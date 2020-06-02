@@ -1,12 +1,9 @@
 package com.example.imagetotext_v2;
 
 import android.Manifest;
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Criteria;
@@ -17,162 +14,116 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.provider.Settings;
 import android.util.Log;
-import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
-import androidx.fragment.app.DialogFragment;
-import androidx.fragment.app.FragmentActivity;
-import androidx.fragment.app.FragmentManager;
-
-import com.google.android.gms.maps.model.LatLng;
-import com.parse.ParseObject;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 
-public class LocationService extends Service  {
-    Context context;
-    boolean isGPSEnabled = false;
-    // flag for network status
-    boolean isNetworkEnabled = false;
-    // flag for GPS status
-    boolean canGetLocation = false;
-    Location location; // location
-    double latitude; // latitude
-    double longitude; // longitude
-    // The minimum distance to change Updates in meters
-    private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 10; // 10 meters
-    // The minimum time between updates in milliseconds
-    private static final long MIN_TIME_BW_UPDATES = 500 * 10 * 1; // 5 seconds
-    // Declaring a Location Manager
-    protected LocationManager locationManager;
+// ref: https://www.youtube.com/watch?v=lvcGh2ZgHeA
+// Get update locations from services
 
-    public LocationService(Context context) {
-        this.context = context;
-        getLocation();
-    }
+public class LocationService extends Service {
+    private static final int TIME = 5000;
+    private static final int FASTTIME = 3000;
+    private static final int DISTANCE = 5;
+
+    private LocationListener listener;
+    private LocationManager locationManager;
+    public Location lastLocation=null;
+    private double lastDistance=0;
+    public double sumDistance;
+
 
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
         return null;
-    } //IBinder
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        //return super.onStartCommand(intent, flags, startId);
-        Toast.makeText(this, "Start Service", Toast.LENGTH_SHORT).show();
 
         return START_STICKY;
-    }// onStartCommand
+    }
 
+    @Override
+    public void onCreate() {
+        listener = new LocationListener() {
+            @Override
+            public void onLocationChanged(Location location) {
+                updateWithNewLocation(location);
+
+                Log.i("distance","---> "+sumDistance);
+                Intent i=new Intent("location_update");
+                i.putExtra("Lat",location.getLatitude());
+                i.putExtra("Lng",location.getLongitude());
+                i.putExtra("distance",sumDistance);
+                sendBroadcast(i);
+
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {
+
+            }
+
+            @Override
+            public void onProviderEnabled(String provider) {
+
+            }
+
+            @Override
+            public void onProviderDisabled(String provider) {
+                Intent i = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+                i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            }
+        };
+        locationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        Criteria criteria=new Criteria();
+        criteria.setAccuracy(Criteria.ACCURACY_FINE);
+
+        String provider = locationManager.getBestProvider(criteria, true);
+        Log.d("Location"," best provider "+ provider);
+
+        locationManager.requestLocationUpdates(provider, TIME, DISTANCE, listener);
+
+    } //onCreate
+
+    private void updateWithNewLocation(Location location) {
+        String latLongString="";
+        if(location!=null){
+            double lat=location.getLatitude();
+            double lng=location.getLongitude();
+            latLongString="Lat: "+lat+" ::  Long : "+lng;
+
+            if(lastLocation!=null){
+                double elaspedTime=(location.getTime()-lastLocation.getTime())/1000;
+                lastDistance=lastLocation.distanceTo(location);
+                sumDistance=sumDistance+(lastDistance/1000);
+            }
+            this.lastLocation=location;
+            Log.d("Speed"," distance "+lastDistance+" sumDist "+sumDistance);
+
+
+        } else {
+            latLongString= " No location found ";
+        } // if
+
+    }//updateWithNewLocation
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-    }// OnDesTroy
-
-
-    public Location getLocation() {
-        try {
-            locationManager = (LocationManager) context
-                    .getSystemService(LOCATION_SERVICE);
-            // getting GPS status
-            isGPSEnabled = locationManager
-                    .isProviderEnabled(LocationManager.GPS_PROVIDER);
-            // getting network status
-            isNetworkEnabled = locationManager
-                    .isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-            if (!isGPSEnabled && !isNetworkEnabled) {
-                // no network provider is enabled
-                // Log.e(“Network-GPS”, “Disable”);
-            } else {
-                this.canGetLocation = true;
-                // First get location from Network Provider
-                if (isNetworkEnabled) {
-                    if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                        // TODO: Consider calling
-                        //    ActivityCompat#requestPermissions
-                        // here to request the missing permissions, and then overriding
-                        //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                        //                                          int[] grantResults)
-                        // to handle the case where the user grants the permission. See the documentation
-                        // for ActivityCompat#requestPermissions for more details.
-                        return null;
-                    }
-                    locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
-                            MIN_TIME_BW_UPDATES,
-                            MIN_DISTANCE_CHANGE_FOR_UPDATES, (LocationListener) this);
-                    // Log.e(“Network”, “Network”);
-                    if (locationManager != null) {
-                        location = locationManager
-                                .getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-                        if (location != null) {
-                            latitude = location.getLatitude();
-                            longitude = location.getLongitude();
-                        }
-                    }
-                } else
-                    // if GPS Enabled get lat/long using GPS Services
-                    if (isGPSEnabled) {
-                        if (location == null) {
-                            locationManager.requestLocationUpdates(
-                                    LocationManager.GPS_PROVIDER,
-                                    MIN_TIME_BW_UPDATES,
-                                    MIN_DISTANCE_CHANGE_FOR_UPDATES, (LocationListener) this);
-                            //Log.e(“GPS Enabled”, “GPS Enabled”);
-                            if (locationManager != null) {
-                                location = locationManager
-                                        .getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                                if (location != null) {
-                                    latitude = location.getLatitude();
-                                    longitude = location.getLongitude();
-                                }
-                            }
-                        }
-                    }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
+        if(locationManager!=null){
+            locationManager.removeUpdates(listener);
         }
-        return location;
-    }
-    public double getLatitude() {
-        if (location != null) {
-            latitude = location.getLatitude();
-        }
-        return latitude;
-    }
-    public double getLongitude() {
-        if (location != null) {
-            longitude = location.getLongitude();
-        }
-        return longitude;
-    }
-    public boolean canGetLocation() {
-        return this.canGetLocation;
-    }
-    public void showSettingsAlert() {
-        AlertDialog.Builder alertDialog = new AlertDialog.Builder(context);
-        alertDialog.setTitle("GPS settings");
-        alertDialog.setMessage("GPS is not enabled. Do you want to go to settings menu?");
-        alertDialog.setPositiveButton("Settings", new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int which) {
-                Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-                context.startActivity(intent);
-            }
-        });
-        alertDialog.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-            public void onClick(DialogInterface dialog, int which) {
-                dialog.cancel();
-            }
-        });
-        alertDialog.show();
-    }
+    }// onDestroy
+}// service
 
 
-
-
-}

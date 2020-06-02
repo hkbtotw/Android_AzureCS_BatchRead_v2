@@ -11,11 +11,14 @@ import androidx.fragment.app.DialogFragment;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
+import android.app.PendingIntent;
 import android.app.ProgressDialog;
+import android.content.BroadcastReceiver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -30,6 +33,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.provider.Settings;
@@ -49,9 +53,18 @@ import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.gson.Gson;
+//import com.karumi.dexter.Dexter;
+//import com.karumi.dexter.PermissionToken;
+//import com.karumi.dexter.listener.PermissionDeniedResponse;
+//import com.karumi.dexter.listener.PermissionGrantedResponse;
+//import com.karumi.dexter.listener.PermissionRequest;
+//import com.karumi.dexter.listener.single.PermissionListener;
 import com.parse.FindCallback;
 import com.parse.Parse;
 import com.parse.ParseACL;
@@ -113,7 +126,10 @@ public class MainActivity extends AppCompatActivity {
     Button mLocOff;
     TextView mDistanceView;
 
+    TextView txt_location;
+
     private static final int TIME = 5000;
+    private static final int FASTTIME = 3000;
     private static final int DISTANCE = 5;  // Check at every i second  (i *1000) if the location changed more than distance, to update location
     private LocationManager lcm;
     private ArrayList latLonList;
@@ -123,6 +139,8 @@ public class MainActivity extends AppCompatActivity {
     public Location lastLocation=null;
     private double lastDistance=0;
     public double sumDistance=0;
+
+    private BroadcastReceiver broadcastReceiver;
 
     private static final int CAMERA_REQUEST_CODE=200;
     private static final int STORAGE_REQUEST_CODE=400;
@@ -165,9 +183,16 @@ public class MainActivity extends AppCompatActivity {
         mLocOff=findViewById(R.id.offLocation);
         mDistanceView=findViewById(R.id.distanceView);
 
+        txt_location=findViewById(R.id.txt_location);
+
+
+        if(runtime_permission()){
+            Log.i("Warning","Need permission !!!!");
+        }// runtime
 
         cameraPermission=new String[]{Manifest.permission.CAMERA,Manifest.permission.WRITE_EXTERNAL_STORAGE};
         storagePermission=new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE};
+
 
         recordFlag=false;
         lcm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
@@ -182,28 +207,28 @@ public class MainActivity extends AppCompatActivity {
         mLocOn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                //Intent intent=new Intent(MainActivity.this, LocationService.class);
-                //startService(intent);
+                Intent intent=new Intent(MainActivity.this, LocationService.class);
+                startService(intent);
+
+                /*
                 recordFlag=true;
                 Toast.makeText(MainActivity.this,"Start Recording Running Distance ",Toast.LENGTH_LONG).show();
+                */
+
             }
         }); //mLocOn
 
         mLocOff.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                //Intent intent=new Intent(MainActivity.this, LocationService.class);
-                //stopService(intent);
-                recordFlag=false;
-                ParseObject object = new ParseObject("DriverMonitor");
-                SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
-                String currentDatetime=sdf.format(new Date());
 
-                // Save data to Parse server
-                object = new ParseObject("DriverMonitor");
-                String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
-                parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
-                Toast.makeText(MainActivity.this,"Covered Distance Recorded",Toast.LENGTH_LONG).show();
+                Intent intent=new Intent(MainActivity.this, LocationService.class);
+                stopService(intent);
+
+                recordFlag=true;
+
+
+
             }
         }); //mLocOff
 
@@ -335,18 +360,67 @@ public class MainActivity extends AppCompatActivity {
 
         ParseAnalytics.trackAppOpenedInBackground(getIntent());
 
-
-
-
-
-
     } // On Create
 
+
+    private boolean runtime_permission() {
+        if (Build.VERSION.SDK_INT >= 23 && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 100);
+            return true;
+        }
+        return false;
+    } // runtime_permission
+
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if(broadcastReceiver!=null){
+            unregisterReceiver(broadcastReceiver);
+        }
+    }// onDestroy
 
     @Override
     protected void onResume() {
         super.onResume();
+        if(broadcastReceiver == null){
+            broadcastReceiver=new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
 
+                    double lat=intent.getExtras().getDouble("Lat");
+                    double lng=intent.getExtras().getDouble("Lng");
+                    double sumDistance=intent.getExtras().getDouble("distance");
+                    //txt_location.setText(" Lat : "+lat+", Lng : "+lng+ " --> "+sumDistance);
+                    DecimalFormat df = new DecimalFormat("#.#");
+                    String dummy = df.format(sumDistance);
+
+                    Log.i("text"," text out : "+dummy);
+                    mDistanceView.setText("Running : "+dummy+" km");
+
+                    if(recordFlag=true){
+                        recordFlag=false;
+                        ParseObject object = new ParseObject("DriverMonitor");
+                        SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
+                        String currentDatetime=sdf.format(new Date());
+
+
+                        Log.i("checkDist","sumDistance : "+sumDistance);
+                        // Save data to Parse server
+                        object = new ParseObject("DriverMonitor");
+                        String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
+                        parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
+                        Toast.makeText(MainActivity.this,"Covered Distance Recorded",Toast.LENGTH_LONG).show();
+                    }
+
+
+                }
+            };
+        }
+        registerReceiver(broadcastReceiver,new IntentFilter("location_update"));
+
+
+        /*
         //lcm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             // TODO: Consider calling
@@ -356,7 +430,7 @@ public class MainActivity extends AppCompatActivity {
             //                                          int[] grantResults)
             // to handle the case where the user grants the permission. See the documentation
             // for ActivityCompat#requestPermissions for more details.
-            ActivityCompat.requestPermissions((Activity) this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 101);
+            ActivityCompat.requestPermissions((Activity) this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 101);
 
             return;
         }
@@ -372,8 +446,11 @@ public class MainActivity extends AppCompatActivity {
 
         lcm.requestLocationUpdates(provider,
                 TIME, DISTANCE, listener);
-    }
+        */
 
+    } // onResume
+
+    /*
     private final LocationListener listener= new LocationListener() {
         @Override
         public void onLocationChanged(Location location) {
@@ -409,13 +486,11 @@ public class MainActivity extends AppCompatActivity {
         }
     }; // End LocationListener
 
-
     @Override
     public void onStop(){
         super.onStop();
         lcm.removeUpdates(listener);
     } // onStop
-
 
     private void updateWithNewLocation(Location location){
         String latLongString="";
@@ -444,16 +519,16 @@ public class MainActivity extends AppCompatActivity {
 
         Log.d("List Out", latLonList.toString() );
         Log.d("DateTime","location date :" + sdf.format(location.getTime()));
-        /*
-        ParseObject object = new ParseObject("DriverMonitor");
-        sdf=new SimpleDateFormat("dd-MM-YYYY");
-        currentDatetime=sdf.format(new Date());
+
+        //ParseObject object = new ParseObject("DriverMonitor");
+        //sdf=new SimpleDateFormat("dd-MM-YYYY");
+        //currentDatetime=sdf.format(new Date());
 
         // Save data to Parse server
-        object = new ParseObject("DriverMonitor");
-        String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
-        parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
-        */
+        //object = new ParseObject("DriverMonitor");
+        //String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
+        //parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
+
         DecimalFormat df = new DecimalFormat("#.#");
         String dummy = df.format(sumDistance);
 
@@ -462,6 +537,7 @@ public class MainActivity extends AppCompatActivity {
         //WriteFile(latLongString);
 
     } //updateWithNewLocation
+    */
 
 
     private void showImageImportDialog() {
@@ -706,7 +782,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }  // On Activity Result
-
 
     public static class EnableGpsDialogFragment extends DialogFragment {
 
