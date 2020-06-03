@@ -12,6 +12,7 @@
 
     <application
         android:name=".StarterApplication"
+
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -22,6 +23,7 @@
         <activity android:name=".DriverReport"></activity>
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden|layoutDirection">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -34,7 +36,18 @@
             android:theme="@style/AppTheme" />
         <activity android:name=".LocationService" />
 
-        <service android:name=".LocationService"></service>
+        <service
+            android:name=".LocationService"
+            android:enabled="true" />
+        <receiver
+            android:name=".ServicerRestarterBroadcastReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:label="RestartServiceWhenStopped">
+            <intent-filter>
+                <action android:name="com.example.imagetotext_v2.RestartService" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

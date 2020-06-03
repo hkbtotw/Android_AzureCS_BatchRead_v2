@@ -11,6 +11,7 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
 import android.provider.Settings;
 import android.util.Log;
@@ -20,6 +21,7 @@ import androidx.core.app.ActivityCompat;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.TimerTask;
 
 // ref: https://www.youtube.com/watch?v=lvcGh2ZgHeA
 // Get update locations from services
@@ -34,6 +36,17 @@ public class LocationService extends Service {
     public Location lastLocation=null;
     private double lastDistance=0;
     public double sumDistance;
+
+    Context context;
+
+    public LocationService(Context applicationContext) {
+        super();
+        context = applicationContext;
+        Log.i("HERE", "here service created!");
+    }
+
+    public LocationService() {
+    }
 
 
     @Nullable
@@ -50,6 +63,7 @@ public class LocationService extends Service {
 
     @Override
     public void onCreate() {
+
         listener = new LocationListener() {
             @Override
             public void onLocationChanged(Location location) {
@@ -120,6 +134,8 @@ public class LocationService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        Intent broadcastIntent=new Intent("com.example.imagetotext_v2.RestartService");
+        sendBroadcast(broadcastIntent);
         if(locationManager!=null){
             locationManager.removeUpdates(listener);
         }

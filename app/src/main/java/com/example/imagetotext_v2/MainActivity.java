@@ -10,6 +10,7 @@ import androidx.fragment.app.DialogFragment;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.Dialog;
 import android.app.PendingIntent;
 import android.app.ProgressDialog;
@@ -58,6 +59,9 @@ import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.vision.Frame;
+import com.google.android.gms.vision.text.TextBlock;
+import com.google.android.gms.vision.text.TextRecognizer;
 import com.google.gson.Gson;
 //import com.karumi.dexter.Dexter;
 //import com.karumi.dexter.PermissionToken;
@@ -139,6 +143,9 @@ public class MainActivity extends AppCompatActivity {
     public Location lastLocation=null;
     private double lastDistance=0;
     public double sumDistance=0;
+    public Bitmap bitmapBck;
+
+    private static final int sharpenWeight = 20;
 
     private BroadcastReceiver broadcastReceiver;
 
@@ -221,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
         mLocOff.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
+                Toast.makeText(MainActivity.this,"Recording covered distances to Server", Toast.LENGTH_LONG).show();
                 Intent intent=new Intent(MainActivity.this, LocationService.class);
                 stopService(intent);
 
@@ -339,6 +346,7 @@ public class MainActivity extends AppCompatActivity {
         mLoadReport.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                Toast.makeText(MainActivity.this,"Loading report",Toast.LENGTH_SHORT).show();
                 SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
                 String currentDatetime=sdf.format(new Date());
                 String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
@@ -363,6 +371,19 @@ public class MainActivity extends AppCompatActivity {
     } // On Create
 
 
+    private boolean isMyServiceRunning(Class<?> serviceClass) {
+        ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.getName().equals(service.service.getClassName())) {
+                Log.i ("isMyServiceRunning?", true+"");
+                return true;
+            }
+        }
+        Log.i ("isMyServiceRunning?", false+"");
+        return false;
+    } // isMyServiceRunning
+
+
     private boolean runtime_permission() {
         if (Build.VERSION.SDK_INT >= 23 && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 100);
@@ -383,6 +404,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        LocationService mSensorService = new LocationService(getApplicationContext());
+        Intent mServiceIntent = new Intent(getApplicationContext(), mSensorService.getClass());
+        if (!isMyServiceRunning(mSensorService.getClass())) {
+            startService(mServiceIntent);
+        }
         if(broadcastReceiver == null){
             broadcastReceiver=new BroadcastReceiver() {
                 @Override
@@ -410,7 +436,7 @@ public class MainActivity extends AppCompatActivity {
                         object = new ParseObject("DriverMonitor");
                         String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
                         parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
-                        Toast.makeText(MainActivity.this,"Covered Distance Recorded",Toast.LENGTH_LONG).show();
+                        Toast.makeText(MainActivity.this,"Covered Distance Recorded : "+sumDistance,Toast.LENGTH_LONG).show();
                     }
 
 
@@ -660,6 +686,7 @@ public class MainActivity extends AppCompatActivity {
                 mPreviewIv.setImageURI(resultUri);
                 BitmapDrawable bitmapDrawable=(BitmapDrawable)mPreviewIv.getDrawable();
                 Bitmap bitmap=bitmapDrawable.getBitmap();
+                bitmapBck=bitmap;
 
                 // Action start HERE
                 Bitmap bitmap1=bitmap;
@@ -667,10 +694,16 @@ public class MainActivity extends AppCompatActivity {
                 if(!flagMeter){
                     // toBinary ref: https://stackoverflow.com/questions/20299264/android-convert-grayscale-to-binary-image
                     // and https://stackoverflow.com/questions/6764839/error-with-setpixels
-                    bitmap1=imageProcessing.toBinary(bitmap);
+                    Bitmap bitDummy2=imageProcessing.toBinary(bitmap);
+                    Bitmap bitDummy=imageProcessing.RemoveNoise(bitDummy2);
+                    bitmap1=imageProcessing.sharpen(bitDummy,sharpenWeight);
+
                 }else{
-                    bitmap1=imageProcessing.toGrayscale(bitmap);
+                    Bitmap bitDummy=imageProcessing.toGrayscale(bitmap);
+                    //Bitmap bitDummy=imageProcessing.RemoveNoise(bitDummy2);
+                    bitmap1=imageProcessing.sharpen(bitDummy,sharpenWeight);
                 }
+                mPreviewIv.setImageBitmap(bitmap1);
                 int height = bitmap1.getHeight();
                 int width = bitmap1.getWidth();
                 Bitmap newBitmap=Bitmap.createScaledBitmap(bitmap1,width*2,height*2,true);
@@ -755,11 +788,21 @@ public class MainActivity extends AppCompatActivity {
                             Log.i("Result"," textview : "+s);
                             //mResultView.setText(s);
                             //mEditResult.setText(mResultView.getText());
-                            String digitText = s.replaceAll("[^0-9.]", "");
-                            if(digitText.length()>0){
-                                mEditResult.setText(digitText);
+                            String digitText1 = s.replaceAll("[^0-9.]", "");
+                            String digitText = digitText1.replaceAll("[^a-zA-Z0-9]", "");
+                            String subDigit;
+                            if(digitText.length()>=6){
+                                subDigit=digitText.substring(0,6);
                             }else{
-                                mEditResult.setText("Not readable");
+                                subDigit=digitText;
+                            }
+                            if(subDigit.length()==6 ){
+                                mEditResult.setText(subDigit);
+                            }else{
+                                mEditResult.setText(": Not readable");
+                                if(!flagMeter || subDigit.length()<6){
+                                    RepeatedRecognition();
+                                }//repeated
                             }
 
 
@@ -783,6 +826,171 @@ public class MainActivity extends AppCompatActivity {
         }
     }  // On Activity Result
 
+
+    public void RepeatedRecognition(){
+        Log.i("repeat","Get in REPEAT");
+
+
+        // Action start HERE
+        Bitmap bitmap1;
+        Log.i("repeat","flagMeter : "+flagMeter);
+
+        Bitmap bitDummy=imageProcessing.toGrayscale(bitmapBck);
+        //Bitmap bitDummy=imageProcessing.RemoveNoise(bitDummy2);
+        bitmap1=imageProcessing.sharpen(bitDummy,sharpenWeight);
+        //bitmap1=bitmapBck;
+
+        mPreviewIv.setImageBitmap(bitmap1);
+        //bitmap1=bitmap;
+
+
+        int height = bitmap1.getHeight();
+        int width = bitmap1.getWidth();
+        Bitmap newBitmap=Bitmap.createScaledBitmap(bitmap1,width*1,height*1,true);
+
+        // View processed image for checking
+        //mProcessedImageView.setImageBitmap(newBitmap);
+        ByteArrayOutputStream outputStream=new ByteArrayOutputStream();
+        //bitmap.compress(Bitmap.CompressFormat.JPEG,100,outputStream);
+        newBitmap.compress(Bitmap.CompressFormat.JPEG,100,outputStream);
+        final ByteArrayInputStream inputStream=new ByteArrayInputStream(outputStream.toByteArray());
+
+        AsyncTask<InputStream,String, String> visionTask=new AsyncTask<InputStream, String, String>() {
+            ProgressDialog progressDialog=new ProgressDialog(MainActivity.this);
+
+            @Override
+            protected void onPreExecute(){
+                progressDialog.show();
+            }
+
+            @Override
+            protected String doInBackground(InputStream... inputStreams) {
+                try{
+                    publishProgress("Recognizing...");
+                    //String[] features={"Description"};
+                    String[] features={};
+                    String[] details={};
+                    StringBuilder result=visionBatchRead.analyzeImage1(inputStreams[0],features,details);
+                    Log.i("Result"," textview : "+result);
+                    Log.i("Result"," textview : "+result.toString());
+
+                    String resultOut=result.toString();
+                    if(resultOut.length()==0){
+                        resultOut="Not Readble";
+                    }
+                    //AnalysisResult result=visionServiceClient.analyzeImage(inputStreams[0],features,details);
+                    //OCR result=visionServiceClient.recognizeText(inputStreams[0],"en",true);
+                    //String jsonResult=new Gson().toJson(result);
+                    //Log.i("info","-->"+jsonResult);
+                    return resultOut;
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (VisionServiceException e) {
+                    e.printStackTrace();
+                }
+                return "";
+            }
+
+            @Override
+            protected void onPostExecute(String s){
+                if(TextUtils.isEmpty(s)){
+                    Toast.makeText(MainActivity.this,"API return empty",Toast.LENGTH_SHORT).show();
+
+                }else {
+                    progressDialog.dismiss();
+
+
+                            /*
+                            OCR result = new Gson().fromJson(s, OCR.class);
+                            StringBuilder result_text = new StringBuilder();
+
+                            Log.i("OCR"," ==> "+s);
+                            int regionNumber= result.regions.size();
+                            int lineNumer=result.regions.get(0).lines.size();
+                            int wordNumber;
+
+                            //Log.i("OCR"," ==> "+ result.regions.get(0).lines.get(0).words.size());
+                            Log.i("OCR"," RegionNumber ==> "+ regionNumber);
+                            Log.i("OCR"," LineNumber ==> "+ lineNumer);
+                            for(int i=0; i<lineNumer; i++){
+
+                                wordNumber=result.regions.get(0).lines.get(i).words.size();
+                                Log.i("OCR"," wordNumber ==> "+ wordNumber+" "+i);
+                                for(int j=0; j<wordNumber;j++){
+                                    Log.i("OCR"," ==> "+ result.regions.get(0).lines.get(i).words.get(j).text+" "+j);
+                                    result_text.append(result.regions.get(0).lines.get(i).words.get(j).text+" ");
+                                }
+                            }
+                            txtResult.setText(result_text.toString());  */
+                    Log.i("Result"," textview : "+s);
+                    //mResultView.setText(s);
+                    //mEditResult.setText(mResultView.getText());
+                    String digitText1 = s.replaceAll("[^0-9.]", "");
+                    String digitText = digitText1.replaceAll("[^a-zA-Z0-9]", "");
+                    String subDigit;
+                    if(digitText.length()>=6){
+                        subDigit=digitText.substring(0,6);
+                    }else{
+                        subDigit=digitText;
+                    }
+                    if(subDigit.length()==6){
+                        mEditResult.setText(subDigit);
+                    }else{
+
+                        //mEditResult.setText("; Not readable");
+                        GoogleTextRecognition();
+                    }
+
+
+                }
+            }
+
+            @Override
+            protected void onProgressUpdate(String... values){
+                progressDialog.setMessage(values[0]);
+            }
+        };  //AsyncTask
+
+        visionTask.execute(inputStream);
+
+
+    }//RepeatedRecognition
+
+    public void GoogleTextRecognition(){
+        Toast.makeText(MainActivity.this, "Google Recognition Running", Toast.LENGTH_SHORT).show();
+        Bitmap bitmap=bitmapBck;
+        mPreviewIv.setImageBitmap(bitmap);
+
+        TextRecognizer recognizer=new TextRecognizer.Builder(getApplicationContext()).build();
+
+        if(!recognizer.isOperational()){
+            Toast.makeText(this,"Error",Toast.LENGTH_SHORT).show();
+
+        }else {
+            Frame frame = new Frame.Builder().setBitmap(bitmap).build();
+            SparseArray<TextBlock> items = recognizer.detect(frame);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < items.size(); i++) {
+                TextBlock myItem = items.valueAt(i);
+                sb.append(myItem.getValue());
+            }
+
+            Log.i("GoogleR"," See : "+sb.toString());
+            String digitText1 = sb.toString().replaceAll("[^0-9.]", "");
+            String digitText = digitText1.replaceAll("[^a-zA-Z0-9]", "");
+            String subDigit;
+            if(digitText.length()>=6){
+                subDigit=digitText.substring(0,6);
+            }else{
+                subDigit=digitText;
+            }
+
+            mEditResult.setText(subDigit);
+        }
+
+    }//GoogleTextRecognition
+
     public static class EnableGpsDialogFragment extends DialogFragment {
 
         @Override
@@ -802,8 +1010,6 @@ public class MainActivity extends AppCompatActivity {
 
     } // EnableGpsDialogFragment
 } // Program
-
-
 
 
 class ParseServer{
@@ -959,14 +1165,14 @@ class ImageProcessing{
                 // get one pixel color
                 int pixel = bmpOriginal.getPixel(x, y);
                 int red = Color.red(pixel);
-                //int green = Color.green(pixel);
-                //int blue = Color.blue(pixel);
+                int green = Color.green(pixel);
+                int blue = Color.blue(pixel);
 
-                //int gray = (int)(red * 0.3 + green * 0.59 + blue * 0.11);
+                int gray = (int)(red * 0.3 + green * 0.59 + blue * 0.11);
 
                 //get binary value
-                //if(gray < threshold){
-                if(red < threshold){
+                if(gray < threshold){
+                //if(red < threshold){
                     bmpBinary.setPixel(x, y, 0xFF000000);
                     //Log.i("color"," pixel : 1"+x+" "+y);
                 } else{
@@ -978,7 +1184,134 @@ class ImageProcessing{
         }
         return bmpBinary;
     } // toBinary
+
+    //ref : https://xjaphx.wordpress.com/2011/06/22/image-processing-convolution-matrix/
+    // filter and convolution class
+    public Bitmap sharpen(Bitmap src, double weight) {
+        double[][] SharpConfig = new double[][] {
+                { 0 , -2    , 0  },
+                { -2, weight, -2 },
+                { 0 , -2    , 0  }
+        };
+        ConvolutionMatrix convMatrix = new ConvolutionMatrix(3);
+        convMatrix.applyConfig(SharpConfig);
+        convMatrix.Factor = weight - 8;
+        return ConvolutionMatrix.computeConvolution3x3(src, convMatrix);
+    }//sharpen filter
+
+    // ref: https://stackoverflow.com/questions/32077223/android-image-noise-removal
+    // Noise remover
+    public Bitmap RemoveNoise(Bitmap bmap) {
+        for (int x = 0; x < bmap.getWidth(); x++) {
+            for (int y = 0; y < bmap.getHeight(); y++) {
+                int pixel = bmap.getPixel(x, y);
+                int R = Color.red(pixel);
+                int G = Color.green(pixel);
+                int B = Color.blue(pixel);
+                if (R < 162 && G < 162 && B < 162)
+                    bmap.setPixel(x, y, Color.BLACK);
+            }
+        }
+        for (int  x = 0; x < bmap.getWidth(); x++) {
+            for (int y = 0; y < bmap.getHeight(); y++) {
+                int pixel = bmap.getPixel(x, y);
+                int R = Color.red(pixel);
+                int G = Color.green(pixel);
+                int B = Color.blue(pixel);
+                if (R > 162 && G > 162 && B > 162)
+                    bmap.setPixel(x, y, Color.WHITE);
+            }
+        }
+        return bmap;
+    }// RemoveNoise
+
 }// class ImageProcessing
+
+class ConvolutionMatrix{
+    public static final int SIZE = 3;
+
+    public double[][] Matrix;
+    public double Factor = 1;
+    public double Offset = 1;
+
+    public ConvolutionMatrix(int size) {
+        Matrix = new double[size][size];
+    }
+
+    public void setAll(double value) {
+        for (int x = 0; x < SIZE; ++x) {
+            for (int y = 0; y < SIZE; ++y) {
+                Matrix[x][y] = value;
+            }
+        }
+    }
+
+    public void applyConfig(double[][] config) {
+        for(int x = 0; x < SIZE; ++x) {
+            for(int y = 0; y < SIZE; ++y) {
+                Matrix[x][y] = config[x][y];
+            }
+        }
+    }
+
+    public static Bitmap computeConvolution3x3(Bitmap src, ConvolutionMatrix matrix) {
+        int width = src.getWidth();
+        int height = src.getHeight();
+        Bitmap result = Bitmap.createBitmap(width, height, src.getConfig());
+
+        int A, R, G, B;
+        int sumR, sumG, sumB;
+        int[][] pixels = new int[SIZE][SIZE];
+
+        for(int y = 0; y < height - 2; ++y) {
+            for(int x = 0; x < width - 2; ++x) {
+
+                // get pixel matrix
+                for(int i = 0; i < SIZE; ++i) {
+                    for(int j = 0; j < SIZE; ++j) {
+                        pixels[i][j] = src.getPixel(x + i, y + j);
+                    }
+                }
+
+                // get alpha of center pixel
+                A = Color.alpha(pixels[1][1]);
+
+                // init color sum
+                sumR = sumG = sumB = 0;
+
+                // get sum of RGB on matrix
+                for(int i = 0; i < SIZE; ++i) {
+                    for(int j = 0; j < SIZE; ++j) {
+                        sumR += (Color.red(pixels[i][j]) * matrix.Matrix[i][j]);
+                        sumG += (Color.green(pixels[i][j]) * matrix.Matrix[i][j]);
+                        sumB += (Color.blue(pixels[i][j]) * matrix.Matrix[i][j]);
+                    }
+                }
+
+                // get final Red
+                R = (int)(sumR / matrix.Factor + matrix.Offset);
+                if(R < 0) { R = 0; }
+                else if(R > 255) { R = 255; }
+
+                // get final Green
+                G = (int)(sumG / matrix.Factor + matrix.Offset);
+                if(G < 0) { G = 0; }
+                else if(G > 255) { G = 255; }
+
+                // get final Blue
+                B = (int)(sumB / matrix.Factor + matrix.Offset);
+                if(B < 0) { B = 0; }
+                else if(B > 255) { B = 255; }
+
+                // apply new pixel
+                result.setPixel(x + 1, y + 1, Color.argb(A, R, G, B));
+            }
+        }
+
+        // final image
+        return result;
+    }
+}// class convolution matrix
 
 class VisionBatchRead implements VisionServiceClient {
     private Gson gson = new Gson();
