@@ -29,13 +29,15 @@ import java.util.TimerTask;
 public class LocationService extends Service {
     private static final int TIME = 5000;
     private static final int FASTTIME = 3000;
-    private static final int DISTANCE = 5;
+    private static final int DISTANCE = 10;
 
     private LocationListener listener;
     private LocationManager locationManager;
     public Location lastLocation=null;
     private double lastDistance=0;
     public double sumDistance;
+    public double elapsedTime;
+    public double sumTime;
 
     Context context;
 
@@ -74,6 +76,8 @@ public class LocationService extends Service {
                 i.putExtra("Lat",location.getLatitude());
                 i.putExtra("Lng",location.getLongitude());
                 i.putExtra("distance",sumDistance);
+                i.putExtra("elapsedTime",elapsedTime);
+                i.putExtra("sumTime",sumTime);
                 sendBroadcast(i);
 
             }
@@ -117,12 +121,13 @@ public class LocationService extends Service {
             latLongString="Lat: "+lat+" ::  Long : "+lng;
 
             if(lastLocation!=null){
-                double elaspedTime=(location.getTime()-lastLocation.getTime())/1000;
+                elapsedTime=(location.getTime()-lastLocation.getTime())/(60*1000);
                 lastDistance=lastLocation.distanceTo(location);
                 sumDistance=sumDistance+(lastDistance/1000);
+                sumTime=sumTime+elapsedTime;
             }
             this.lastLocation=location;
-            Log.d("Speed"," distance "+lastDistance+" sumDist "+sumDistance);
+            Log.d("Speed"," distance "+lastDistance+" sumDist "+sumDistance+" sumTime "+sumTime);
 
 
         } else {
@@ -134,8 +139,8 @@ public class LocationService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Intent broadcastIntent=new Intent("com.example.imagetotext_v2.RestartService");
-        sendBroadcast(broadcastIntent);
+        //Intent broadcastIntent=new Intent("com.example.imagetotext_v2.RestartService");
+        //sendBroadcast(broadcastIntent);
         if(locationManager!=null){
             locationManager.removeUpdates(listener);
         }

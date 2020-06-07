@@ -104,6 +104,14 @@
             <TextView
                 android:id="@+id/distanceView"
                 android:text="coverage[km]"
+                android:textSize="30dp"
+                android:paddingTop="10dp"
+                android:padding="10dp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+            <TextView
+                android:id="@+id/elaspedTime"
+                android:text="Time"
                 android:textSize="20dp"
                 android:paddingTop="10dp"
                 android:padding="10dp"

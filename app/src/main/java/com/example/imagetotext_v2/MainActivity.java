@@ -129,12 +129,13 @@ public class MainActivity extends AppCompatActivity {
     Button mLocOn;
     Button mLocOff;
     TextView mDistanceView;
+    TextView mElaspedTime;
 
     TextView txt_location;
 
     private static final int TIME = 5000;
     private static final int FASTTIME = 3000;
-    private static final int DISTANCE = 5;  // Check at every i second  (i *1000) if the location changed more than distance, to update location
+    private static final int DISTANCE = 10;  // Check at every i second  (i *1000) if the location changed more than distance, to update location
     private LocationManager lcm;
     private ArrayList latLonList;
     public Boolean recordFlag;
@@ -144,6 +145,7 @@ public class MainActivity extends AppCompatActivity {
     private double lastDistance=0;
     public double sumDistance=0;
     public Bitmap bitmapBck;
+
 
     private static final int sharpenWeight = 20;
 
@@ -189,9 +191,10 @@ public class MainActivity extends AppCompatActivity {
         mLocOn=findViewById(R.id.onLocation);
         mLocOff=findViewById(R.id.offLocation);
         mDistanceView=findViewById(R.id.distanceView);
+        mElaspedTime=findViewById(R.id.elaspedTime);
 
         txt_location=findViewById(R.id.txt_location);
-
+        //recordFlag=false;
 
         if(runtime_permission()){
             Log.i("Warning","Need permission !!!!");
@@ -214,13 +217,14 @@ public class MainActivity extends AppCompatActivity {
         mLocOn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                //Toast.makeText(MainActivity.this,"Start Recording Running Distance ",Toast.LENGTH_LONG).show();
                 Intent intent=new Intent(MainActivity.this, LocationService.class);
                 startService(intent);
 
-                /*
+
                 recordFlag=true;
                 Toast.makeText(MainActivity.this,"Start Recording Running Distance ",Toast.LENGTH_LONG).show();
-                */
+
 
             }
         }); //mLocOn
@@ -228,13 +232,11 @@ public class MainActivity extends AppCompatActivity {
         mLocOff.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                Toast.makeText(MainActivity.this,"Recording covered distances to Server", Toast.LENGTH_LONG).show();
+                String distanceOut=mDistanceView.getText().toString();
+                Toast.makeText(MainActivity.this,"Recording covered distances to Server : "+distanceOut, Toast.LENGTH_LONG).show();
                 Intent intent=new Intent(MainActivity.this, LocationService.class);
                 stopService(intent);
-
-                recordFlag=true;
-
-
+                //recordFlag=true;
 
             }
         }); //mLocOff
@@ -268,12 +270,12 @@ public class MainActivity extends AppCompatActivity {
                 Log.i("selectId"," choice : "+selectedid);
                 switch (selectedid){
                     case R.id.goTrip:
-                        tripString="GO";
+                        tripString="Origin";
                         Log.i("selectId"," meter  :  1 "+selectedid+" "+tripString);
                         break;
 
                     case R.id.backTrip:
-                        tripString="BACK";
+                        tripString="Destination";
                         Log.i("selectId"," meter  :  2 "+selectedid+" "+tripString);
                         break;
                 }
@@ -307,15 +309,16 @@ public class MainActivity extends AppCompatActivity {
 
                         SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
 
-                        SimpleDateFormat sdfFull=new SimpleDateFormat("dd-MM-YYYY HH:MM:ss");
+                        SimpleDateFormat sdfFull=new SimpleDateFormat("dd-MM-YYYY HH:mm:ss");
                         String currentDatetime=sdf.format(new Date());
                         String currentDatetimeFull=sdfFull.format(new Date());
+                        Log.i("dateIn","currentDate : "+currentDatetimeFull+",   "+currentDatetime);
 
 
                         // Save data to Parse server
                         ParseObject object = new ParseObject("DriverMonitor");
                         String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
-                        if(tripString=="GO"){
+                        if(tripString=="Origin"){
                             Log.i("parse"," tripString : "+tripString+" : "+refCol);
                             parseServer.SaveToParseServerGO(object,mEditResult.getText().toString(),mTripId.getText().toString(),currentDatetimeFull,mUserId.getText().toString(),refCol);
                         }else{
@@ -361,7 +364,8 @@ public class MainActivity extends AppCompatActivity {
                 Intent intent=new Intent(getApplicationContext(), DriverReport.class);
                 intent.putExtra("username",mUserId.getText().toString());
                 intent.putExtra("tripId",mTripId.getText().toString());
-                intent.putExtra("sumDistance",sumDistance);
+                //intent.putExtra("sumDistance",sumDistance);
+                intent.putExtra("sumDistance",mDistanceView.getText().toString());
                 startActivity(intent);
             }
         }); // mLoadReport
@@ -396,6 +400,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        //Intent intent=new Intent(MainActivity.this, LocationService.class);
+        //stopService(intent);
         if(broadcastReceiver!=null){
             unregisterReceiver(broadcastReceiver);
         }
@@ -404,11 +410,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        LocationService mSensorService = new LocationService(getApplicationContext());
-        Intent mServiceIntent = new Intent(getApplicationContext(), mSensorService.getClass());
-        if (!isMyServiceRunning(mSensorService.getClass())) {
-            startService(mServiceIntent);
-        }
+        //LocationService mSensorService = new LocationService(getApplicationContext());
+        //Intent mServiceIntent = new Intent(getApplicationContext(), mSensorService.getClass());
+        //if (!isMyServiceRunning(mSensorService.getClass())) {
+        //    startService(mServiceIntent);
+        //}
         if(broadcastReceiver == null){
             broadcastReceiver=new BroadcastReceiver() {
                 @Override
@@ -417,27 +423,42 @@ public class MainActivity extends AppCompatActivity {
                     double lat=intent.getExtras().getDouble("Lat");
                     double lng=intent.getExtras().getDouble("Lng");
                     double sumDistance=intent.getExtras().getDouble("distance");
+                    double elapsedTime=intent.getExtras().getDouble("elapsedTime");
+                    double sumTime=intent.getExtras().getDouble("sumTime");
                     //txt_location.setText(" Lat : "+lat+", Lng : "+lng+ " --> "+sumDistance);
-                    DecimalFormat df = new DecimalFormat("#.#");
+                    DecimalFormat df = new DecimalFormat("#.##");
                     String dummy = df.format(sumDistance);
 
                     Log.i("text"," text out : "+dummy);
                     mDistanceView.setText("Running : "+dummy+" km");
-
-                    if(recordFlag=true){
+                    mElaspedTime.setText("Running : "+sumTime+ " min");
+                    /*
+                    if(recordFlag){
                         recordFlag=false;
                         ParseObject object = new ParseObject("DriverMonitor");
                         SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
                         String currentDatetime=sdf.format(new Date());
 
 
-                        Log.i("checkDist","sumDistance : "+sumDistance);
+                        Log.i("checkDist","sumDistance : "+sumDistance+" , ElaspedTime : "+elapsedTime);
                         // Save data to Parse server
                         object = new ParseObject("DriverMonitor");
                         String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
                         parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
                         Toast.makeText(MainActivity.this,"Covered Distance Recorded : "+sumDistance,Toast.LENGTH_LONG).show();
                     }
+                    */
+                    ParseObject object = new ParseObject("DriverMonitor");
+                    SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
+                    String currentDatetime=sdf.format(new Date());
+
+
+                    Log.i("checkDist","sumDistance : "+sumDistance+" , ElapsedTime : "+elapsedTime);
+                    // Save data to Parse server
+                    object = new ParseObject("DriverMonitor");
+                    String refCol=mUserId.getText().toString()+"-"+mTripId.getText().toString()+"-"+currentDatetime;
+                    parseServer.SaveToParseServerLATLNG(object,refCol, (float) sumDistance);
+                    Toast.makeText(MainActivity.this,"Covered Distance Recorded : "+sumDistance,Toast.LENGTH_LONG).show();
 
 
                 }
@@ -797,6 +818,7 @@ public class MainActivity extends AppCompatActivity {
                                 subDigit=digitText;
                             }
                             if(subDigit.length()==6 ){
+
                                 mEditResult.setText(subDigit);
                             }else{
                                 mEditResult.setText(": Not readable");

@@ -40,7 +40,8 @@ public class DriverReport extends AppCompatActivity {
         Bundle bundle=getIntent().getExtras();
         String user=bundle.getString("username");
         String tripId=bundle.getString("tripId");
-        double sumDistance=bundle.getDouble("sumDistance");
+        //double sumDistance=bundle.getDouble("sumDistance");
+        String sumDistance=bundle.getString("sumDistance");
 
         SimpleDateFormat sdf=new SimpleDateFormat("dd-MM-YYYY");
         String currentDatetime=sdf.format(new Date());
@@ -53,10 +54,14 @@ public class DriverReport extends AppCompatActivity {
         mUser.setText("Driver : "+user);
         mTripId.setText("Trip ID :"+tripId);
 
-        DecimalFormat df = new DecimalFormat("#.#");
-        String dummy = df.format(sumDistance);
+        //DecimalFormat df = new DecimalFormat("#.##");
+        //String dummy = df.format(sumDistance);
+        String dummy=sumDistance;
 
-        mSumDistance.setText("Total Coverage (LatLng) :"+dummy+" km");
+        Log.i("report"," sumDistance :"+sumDistance+", formatted :"+dummy+ " .");
+
+
+        mSumDistance.setText("Total Coverage (LatLng) :"+dummy+" ");
 
         ParseQuery<ParseObject> query=new ParseQuery<ParseObject>("DriverMonitor");
         query.whereEqualTo("refCol",refCol);
