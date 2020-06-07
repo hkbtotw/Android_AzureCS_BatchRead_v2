@@ -11,6 +11,6 @@ Integrated Camera upload, Cropping and Image processing to v1
 <b> Sample Images:<br/></b>
 Andoird Application
 
-<img src=https://github.com/hkbtotw/Android_AzureCS_BatchRead_v2/blob/master/screenCapture/Screen01.jpg alt="Demo UI" width="800"/>
+<img src=https://github.com/hkbtotw/Android_AzureCS_BatchRead_v2/blob/master/screenCapture/Screen01.jpg alt="Demo UI" width="400"/>
 
 
